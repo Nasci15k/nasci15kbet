@@ -1,4 +1,6 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { Header } from "@/components/casino/Header";
 import { Sidebar } from "@/components/casino/Sidebar";
 import { HeroBanner } from "@/components/casino/HeroBanner";
@@ -6,30 +8,28 @@ import { CategoryFilter } from "@/components/casino/CategoryFilter";
 import { SearchBar } from "@/components/casino/SearchBar";
 import { GamesGrid } from "@/components/casino/GamesGrid";
 import { WinnersSection } from "@/components/casino/WinnersSection";
-import { AuthModal } from "@/components/casino/AuthModal";
 import { GameModal } from "@/components/casino/GameModal";
 import { mockGames, mockWinners } from "@/data/mockData";
-import { Game, User } from "@/types/casino";
+import { Game } from "@/types/casino";
 import { toast } from "sonner";
 
 const Index = () => {
+  const navigate = useNavigate();
+  const { user, profile } = useAuth();
+  
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isGameModalOpen, setIsGameModalOpen] = useState(false);
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [gameUrl, setGameUrl] = useState<string | null>(null);
-  
-  const [user, setUser] = useState<User | null>(null);
-  const [balance, setBalance] = useState(0);
 
   const isLoggedIn = !!user;
+  const balance = profile?.balance || 0;
 
   const filteredGames = useMemo(() => {
     let games = mockGames;
 
-    // Filter by category
     if (activeCategory !== "all") {
       games = games.filter((game) => {
         if (activeCategory === "live") return game.isLive;
@@ -44,7 +44,6 @@ const Index = () => {
       });
     }
 
-    // Filter by search
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       games = games.filter(
@@ -57,52 +56,29 @@ const Index = () => {
     return games;
   }, [activeCategory, searchQuery]);
 
-  const handleLogin = (email: string, password: string) => {
-    // Simulate login - in production, connect to Lovable Cloud
-    setUser({
-      id: "1",
-      code: email,
-      email,
-      name: email.split("@")[0],
-      balance: 100,
-    });
-    setBalance(100);
-    setIsAuthModalOpen(false);
-    toast.success("Login realizado com sucesso!");
-  };
-
-  const handleRegister = (name: string, email: string, password: string) => {
-    // Simulate register - in production, connect to Lovable Cloud
-    setUser({
-      id: "1",
-      code: email,
-      email,
-      name,
-      balance: 0,
-    });
-    setBalance(0);
-    setIsAuthModalOpen(false);
-    toast.success("Conta criada com sucesso! Faça seu primeiro depósito.");
-  };
-
   const handlePlayGame = (game: Game) => {
     if (!isLoggedIn) {
       toast.error("Faça login para jogar");
-      setIsAuthModalOpen(true);
+      navigate("/auth");
       return;
     }
 
     setSelectedGame(game);
     setIsGameModalOpen(true);
-    
-    // In production, call the Playfivers API to get game URL
-    // For now, show the modal without a real game URL
     setGameUrl(null);
     toast.info(`Carregando ${game.name}...`);
   };
 
   const handleDeposit = () => {
-    toast.info("Conecte o Lovable Cloud para habilitar depósitos");
+    if (!isLoggedIn) {
+      navigate("/auth");
+      return;
+    }
+    navigate("/deposit");
+  };
+
+  const handleLogin = () => {
+    navigate("/auth");
   };
 
   return (
@@ -111,7 +87,7 @@ const Index = () => {
         balance={balance}
         isLoggedIn={isLoggedIn}
         onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
-        onLogin={() => setIsAuthModalOpen(true)}
+        onLogin={handleLogin}
         onDeposit={handleDeposit}
       />
 
@@ -124,7 +100,6 @@ const Index = () => {
         }}
       />
 
-      {/* Overlay for mobile sidebar */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-background/80 backdrop-blur-sm z-30 lg:hidden"
@@ -134,22 +109,13 @@ const Index = () => {
 
       <main className="pt-16 lg:pl-64">
         <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto">
-          {/* Hero Banner */}
           <HeroBanner />
-
-          {/* Search */}
           <SearchBar value={searchQuery} onChange={setSearchQuery} />
-
-          {/* Category Filter */}
           <CategoryFilter
             activeCategory={activeCategory}
             onCategoryChange={setActiveCategory}
           />
-
-          {/* Winners Section */}
           <WinnersSection winners={mockWinners} />
-
-          {/* Games Grid */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-foreground">
@@ -163,14 +129,6 @@ const Index = () => {
           </div>
         </div>
       </main>
-
-      {/* Modals */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        onLogin={handleLogin}
-        onRegister={handleRegister}
-      />
 
       <GameModal
         isOpen={isGameModalOpen}
