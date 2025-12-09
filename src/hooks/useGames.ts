@@ -216,3 +216,145 @@ export const useDeleteGame = () => {
     },
   });
 };
+
+// Provider mutations
+export const useCreateProvider = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (provider: Omit<GameProvider, "id" | "order_index">) => {
+      const { data, error } = await supabase
+        .from("game_providers")
+        .insert([provider])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["game-providers"] });
+      queryClient.invalidateQueries({ queryKey: ["all-game-providers"] });
+      toast.success("Provedor criado com sucesso!");
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao criar provedor: " + error.message);
+    },
+  });
+};
+
+export const useUpdateProvider = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, ...provider }: Partial<GameProvider> & { id: string }) => {
+      const { data, error } = await supabase
+        .from("game_providers")
+        .update(provider)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["game-providers"] });
+      queryClient.invalidateQueries({ queryKey: ["all-game-providers"] });
+      toast.success("Provedor atualizado com sucesso!");
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao atualizar provedor: " + error.message);
+    },
+  });
+};
+
+export const useDeleteProvider = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("game_providers").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["game-providers"] });
+      queryClient.invalidateQueries({ queryKey: ["all-game-providers"] });
+      toast.success("Provedor deletado com sucesso!");
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao deletar provedor: " + error.message);
+    },
+  });
+};
+
+// Category mutations
+export const useCreateCategory = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (category: Omit<GameCategory, "id" | "order_index">) => {
+      const { data, error } = await supabase
+        .from("game_categories")
+        .insert([category])
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["game-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["all-game-categories"] });
+      toast.success("Categoria criada com sucesso!");
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao criar categoria: " + error.message);
+    },
+  });
+};
+
+export const useUpdateCategory = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, ...category }: Partial<GameCategory> & { id: string }) => {
+      const { data, error } = await supabase
+        .from("game_categories")
+        .update(category)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["game-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["all-game-categories"] });
+      toast.success("Categoria atualizada com sucesso!");
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao atualizar categoria: " + error.message);
+    },
+  });
+};
+
+export const useDeleteCategory = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("game_categories").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["game-categories"] });
+      queryClient.invalidateQueries({ queryKey: ["all-game-categories"] });
+      toast.success("Categoria deletada com sucesso!");
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao deletar categoria: " + error.message);
+    },
+  });
+};
