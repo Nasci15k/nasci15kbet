@@ -10,17 +10,23 @@ interface PlayfiversRequest {
   action: "getGameUrl" | "getBalance" | "getProviders" | "getGames" | "syncGames";
   gameCode?: string;
   userId?: string;
-  providerCode?: number;
-  page?: number;
+  providerId?: number;
+  provider?: string;
+  gameOriginal?: boolean;
 }
 
-async function fetchPlayfivers(url: string, body: object): Promise<{ ok: boolean; data?: any; error?: string }> {
+const BASE_URL = "https://playfivers.com";
+
+async function fetchPlayfivers(url: string, options: RequestInit = {}): Promise<{ ok: boolean; data?: any; error?: string }> {
   try {
-    console.log("Fetching:", url);
+    console.log("Fetching:", url, "Method:", options.method || "GET");
+    
     const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
     });
 
     const contentType = response.headers.get("content-type") || "";
@@ -33,18 +39,12 @@ async function fetchPlayfivers(url: string, body: object): Promise<{ ok: boolean
       return { ok: false, error: `HTTP ${response.status}: ${responseText.substring(0, 200)}` };
     }
 
-    if (!contentType.includes("application/json")) {
-      // Try to parse anyway in case content-type is wrong
-      try {
-        const data = JSON.parse(responseText);
-        return { ok: true, data };
-      } catch {
-        return { ok: false, error: `API retornou HTML em vez de JSON. URL pode estar incorreta ou API fora do ar. Resposta: ${responseText.substring(0, 200)}` };
-      }
+    try {
+      const data = JSON.parse(responseText);
+      return { ok: true, data };
+    } catch {
+      return { ok: false, error: `Invalid JSON response: ${responseText.substring(0, 200)}` };
     }
-
-    const data = JSON.parse(responseText);
-    return { ok: true, data };
   } catch (error) {
     console.error("Fetch error:", error);
     return { ok: false, error: error instanceof Error ? error.message : "Unknown fetch error" };
@@ -67,7 +67,7 @@ serve(async (req) => {
       .from("api_settings")
       .select("*")
       .eq("provider", "playfivers")
-      .single();
+      .maybeSingle();
 
     if (settingsError || !apiSettings) {
       console.error("API settings not found:", settingsError);
@@ -89,15 +89,7 @@ serve(async (req) => {
     const body: PlayfiversRequest = await req.json();
     console.log("Action requested:", body.action);
 
-    // Try different API URLs
-    const apiUrls = [
-      "https://api.playfivers.com",
-      "https://playfivers.com/api",
-    ];
-    
-    const baseUrl = apiUrls[0];
-    const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/playfivers-webhook`;
-
+    // ====== GET GAME URL ======
     if (body.action === "getGameUrl") {
       if (!body.userId || !body.gameCode) {
         return new Response(
@@ -111,7 +103,7 @@ serve(async (req) => {
         .from("profiles")
         .select("*")
         .eq("user_id", body.userId)
-        .single();
+        .maybeSingle();
 
       if (profileError || !profile) {
         console.error("User not found:", body.userId, profileError);
@@ -121,68 +113,32 @@ serve(async (req) => {
         );
       }
 
+      // Get game info to get provider name
+      const { data: game } = await supabase
+        .from("games")
+        .select("*, game_providers(name)")
+        .eq("external_code", body.gameCode)
+        .maybeSingle();
+
       console.log("Opening game for user:", profile.user_id, "Balance:", profile.balance);
 
       const requestBody = {
-        agent_token,
-        secret_key,
+        agentToken: agent_token,
+        secretKey: secret_key,
         user_code: profile.user_id,
-        user_balance: profile.balance || 0,
         game_code: body.gameCode,
+        provider: body.provider || game?.game_providers?.name || "",
+        game_original: body.gameOriginal ?? game?.is_original ?? true,
+        user_balance: profile.balance || 0,
+        user_rtp: apiSettings.rtp_default || 97,
         lang: "pt",
-        home_url: "https://nasci15kbet.lovable.app",
       };
 
-      console.log("Playfivers request:", JSON.stringify({ ...requestBody, secret_key: "[HIDDEN]" }));
+      console.log("Playfivers request:", JSON.stringify({ ...requestBody, secretKey: "[HIDDEN]" }));
 
-      const result = await fetchPlayfivers(`${baseUrl}/game/open`, requestBody);
-      
-      if (!result.ok) {
-        return new Response(
-          JSON.stringify({ error: result.error }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      if (result.data?.status === "error" || result.data?.error) {
-        return new Response(
-          JSON.stringify({ error: result.data?.msg || result.data?.error || "Erro ao abrir jogo" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      return new Response(
-        JSON.stringify(result.data),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (body.action === "getProviders") {
-      console.log("Fetching providers from Playfivers...");
-      
-      const result = await fetchPlayfivers(`${baseUrl}/game/providers`, { agent_token, secret_key });
-      
-      if (!result.ok) {
-        return new Response(
-          JSON.stringify({ error: result.error }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      return new Response(
-        JSON.stringify(result.data),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (body.action === "getGames") {
-      console.log("Fetching games from provider:", body.providerCode);
-      
-      const result = await fetchPlayfivers(`${baseUrl}/game/list`, {
-        agent_token,
-        secret_key,
-        provider_code: body.providerCode,
-        page: body.page || 1,
+      const result = await fetchPlayfivers(`${BASE_URL}/api/v2/game_launch`, {
+        method: "POST",
+        body: JSON.stringify(requestBody),
       });
       
       if (!result.ok) {
@@ -192,17 +148,71 @@ serve(async (req) => {
         );
       }
       
+      if (result.data?.status === false || result.data?.error) {
+        return new Response(
+          JSON.stringify({ error: result.data?.msg || result.data?.error || "Erro ao abrir jogo" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      return new Response(
+        JSON.stringify({ 
+          game_url: result.data?.launch_url,
+          ...result.data 
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ====== GET PROVIDERS ======
+    if (body.action === "getProviders") {
+      console.log("Fetching providers from Playfivers...");
+      
+      const result = await fetchPlayfivers(`${BASE_URL}/api/v2/providers`);
+      
+      if (!result.ok) {
+        return new Response(
+          JSON.stringify({ error: result.error }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
       return new Response(
         JSON.stringify(result.data),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    // ====== GET GAMES ======
+    if (body.action === "getGames") {
+      console.log("Fetching games from provider:", body.providerId);
+      
+      let url = `${BASE_URL}/api/v2/games`;
+      if (body.providerId) {
+        url += `?provider=${body.providerId}`;
+      }
+      
+      const result = await fetchPlayfivers(url);
+      
+      if (!result.ok) {
+        return new Response(
+          JSON.stringify({ error: result.error }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
+      return new Response(
+        JSON.stringify(result.data),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ====== SYNC GAMES ======
     if (body.action === "syncGames") {
       console.log("Starting full sync with Playfivers...");
       
-      // Get providers first
-      const providersResult = await fetchPlayfivers(`${baseUrl}/game/providers`, { agent_token, secret_key });
+      // Get providers first (GET request)
+      const providersResult = await fetchPlayfivers(`${BASE_URL}/api/v2/providers`);
       
       if (!providersResult.ok) {
         return new Response(
@@ -212,13 +222,14 @@ serve(async (req) => {
       }
 
       const providersData = providersResult.data;
-      console.log("Providers fetched:", providersData?.status);
+      console.log("Providers response:", JSON.stringify(providersData).substring(0, 500));
       
-      if (providersData?.status !== "success" || !providersData?.providers) {
+      // API returns { status: 1, data: [...], msg: "" }
+      if (providersData?.status !== 1 || !providersData?.data) {
         console.error("Failed to fetch providers:", providersData);
         return new Response(
           JSON.stringify({ 
-            error: `Falha ao buscar provedores. Resposta da API: ${JSON.stringify(providersData || {}).substring(0, 200)}` 
+            error: `Falha ao buscar provedores. Resposta: ${JSON.stringify(providersData || {}).substring(0, 300)}` 
           }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -226,14 +237,14 @@ serve(async (req) => {
 
       // Insert/update providers
       let providersCount = 0;
-      for (const provider of providersData.providers || []) {
-        const slug = provider.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      for (const provider of providersData.data || []) {
+        const slug = (provider.name || `provider-${provider.id}`).toLowerCase().replace(/[^a-z0-9]+/g, "-");
         
         // Check if provider exists
         const { data: existingProvider } = await supabase
           .from("game_providers")
           .select("id")
-          .eq("external_id", provider.code)
+          .eq("external_id", provider.id)
           .maybeSingle();
 
         if (existingProvider) {
@@ -241,18 +252,18 @@ serve(async (req) => {
             .from("game_providers")
             .update({
               name: provider.name,
-              logo: provider.icon || null,
+              logo: provider.image || null,
               is_active: true,
             })
-            .eq("external_id", provider.code);
+            .eq("external_id", provider.id);
         } else {
           await supabase
             .from("game_providers")
             .insert({
-              external_id: provider.code,
+              external_id: provider.id,
               name: provider.name,
               slug,
-              logo: provider.icon || null,
+              logo: provider.image || null,
               is_active: true,
             });
         }
@@ -261,86 +272,73 @@ serve(async (req) => {
 
       console.log("Providers synced:", providersCount);
 
-      // Sync games for each provider
-      let totalGames = 0;
-      for (const provider of providersData.providers || []) {
-        let page = 1;
-        let hasMore = true;
+      // Get all games (GET request)
+      const gamesResult = await fetchPlayfivers(`${BASE_URL}/api/v2/games`);
+      
+      if (!gamesResult.ok) {
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: `Provedores sincronizados (${providersCount}), mas erro ao buscar jogos: ${gamesResult.error}` 
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
-        // Get provider from DB
+      const gamesData = gamesResult.data;
+      console.log("Games response status:", gamesData?.status, "Count:", gamesData?.data?.length);
+
+      if (gamesData?.status !== 1 || !gamesData?.data) {
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: `Provedores sincronizados (${providersCount}), mas falha ao processar jogos.` 
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Insert games
+      let totalGames = 0;
+      for (const game of gamesData.data) {
+        // Get provider from DB by name or id
         const { data: dbProvider } = await supabase
           .from("game_providers")
           .select("id")
-          .eq("external_id", provider.code)
+          .or(`external_id.eq.${game.provider_id},name.ilike.${game.provider || ''}`)
           .maybeSingle();
 
-        while (hasMore) {
-          const gamesResult = await fetchPlayfivers(`${baseUrl}/game/list`, {
-            agent_token,
-            secret_key,
-            provider_code: provider.code,
-            page,
-          });
-          
-          if (!gamesResult.ok) {
-            console.error(`Error fetching games for provider ${provider.name}:`, gamesResult.error);
-            hasMore = false;
-            continue;
-          }
+        // Check if game exists
+        const { data: existingGame } = await supabase
+          .from("games")
+          .select("id")
+          .eq("external_code", String(game.game_code || game.id))
+          .maybeSingle();
 
-          const gamesData = gamesResult.data;
-          
-          if (gamesData?.status !== "success" || !gamesData?.games?.length) {
-            hasMore = false;
-            continue;
-          }
+        const gameData = {
+          name: game.game_name || game.name,
+          image: game.image || game.banner || null,
+          provider_id: dbProvider?.id || null,
+          is_active: true,
+          is_original: game.game_original ?? game.original ?? false,
+          rtp: game.rtp || null,
+        };
 
-          console.log(`Provider ${provider.name} page ${page}: ${gamesData.games.length} games`);
-
-          // Insert games
-          for (const game of gamesData.games) {
-            // Check if game exists
-            const { data: existingGame } = await supabase
-              .from("games")
-              .select("id")
-              .eq("external_code", game.game_code)
-              .maybeSingle();
-
-            if (existingGame) {
-              await supabase
-                .from("games")
-                .update({
-                  name: game.game_name,
-                  image: game.banner || null,
-                  provider_id: dbProvider?.id,
-                  is_active: true,
-                  rtp: game.rtp || null,
-                })
-                .eq("external_code", game.game_code);
-            } else {
-              await supabase
-                .from("games")
-                .insert({
-                  external_code: game.game_code,
-                  name: game.game_name,
-                  image: game.banner || null,
-                  provider_id: dbProvider?.id,
-                  is_active: true,
-                  rtp: game.rtp || null,
-                });
-            }
-            
-            totalGames++;
-          }
-
-          page++;
-          if (gamesData.games.length < 50) {
-            hasMore = false;
-          }
-          
-          // Small delay to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 100));
+        if (existingGame) {
+          await supabase
+            .from("games")
+            .update(gameData)
+            .eq("external_code", String(game.game_code || game.id));
+        } else {
+          await supabase
+            .from("games")
+            .insert({
+              external_code: String(game.game_code || game.id),
+              ...gameData,
+            });
         }
+        
+        totalGames++;
       }
 
       console.log("Sync complete. Total games:", totalGames);
