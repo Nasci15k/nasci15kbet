@@ -252,8 +252,8 @@ serve(async (req) => {
             .from("game_providers")
             .update({
               name: provider.name,
-              logo: provider.image || null,
-              is_active: true,
+              logo: provider.image_url || provider.image || null,
+              is_active: provider.status === 1,
             })
             .eq("external_id", provider.id);
         } else {
@@ -263,8 +263,8 @@ serve(async (req) => {
               external_id: provider.id,
               name: provider.name,
               slug,
-              logo: provider.image || null,
-              is_active: true,
+              logo: provider.image_url || provider.image || null,
+              is_active: provider.status === 1,
             });
         }
         providersCount++;
@@ -301,26 +301,29 @@ serve(async (req) => {
       // Insert games
       let totalGames = 0;
       for (const game of gamesData.data) {
-        // Get provider from DB by name or id
+        // Get provider from DB by name (API returns provider as object with name)
+        const providerName = game.provider?.name || game.provider || '';
         const { data: dbProvider } = await supabase
           .from("game_providers")
           .select("id")
-          .or(`external_id.eq.${game.provider_id},name.ilike.${game.provider || ''}`)
+          .ilike("name", providerName)
           .maybeSingle();
 
+        const gameCode = String(game.game_code || game.id);
+        
         // Check if game exists
         const { data: existingGame } = await supabase
           .from("games")
           .select("id")
-          .eq("external_code", String(game.game_code || game.id))
+          .eq("external_code", gameCode)
           .maybeSingle();
 
         const gameData = {
-          name: game.game_name || game.name,
-          image: game.image || game.banner || null,
+          name: game.name || game.game_name,
+          image: game.image_url || game.image || game.banner || null,
           provider_id: dbProvider?.id || null,
-          is_active: true,
-          is_original: game.game_original ?? game.original ?? false,
+          is_active: game.status === true || game.status === 1,
+          is_original: game.original ?? game.game_original ?? false,
           rtp: game.rtp || null,
         };
 
@@ -328,12 +331,12 @@ serve(async (req) => {
           await supabase
             .from("games")
             .update(gameData)
-            .eq("external_code", String(game.game_code || game.id));
+            .eq("external_code", gameCode);
         } else {
           await supabase
             .from("games")
             .insert({
-              external_code: String(game.game_code || game.id),
+              external_code: gameCode,
               ...gameData,
             });
         }
