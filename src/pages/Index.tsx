@@ -19,13 +19,14 @@ import { Loader2 } from "lucide-react";
 const Index = () => {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
-  
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [isGameModalOpen, setIsGameModalOpen] = useState(false);
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [gameUrl, setGameUrl] = useState<string | null>(null);
+  const [launchError, setLaunchError] = useState<string | null>(null);
 
   const { data: dbGames, isLoading: gamesLoading } = useGames(
     activeCategory !== "all" ? activeCategory : undefined,
@@ -97,7 +98,8 @@ const Index = () => {
     setSelectedGame(game);
     setIsGameModalOpen(true);
     setGameUrl(null);
-    
+    setLaunchError(null);
+
     toast.info(`Carregando ${game.name}...`);
 
     try {
@@ -110,9 +112,13 @@ const Index = () => {
         setGameUrl(result.game_url);
         toast.success("Jogo carregado!");
       } else {
-        toast.error("URL do jogo não disponível");
+        const msg = result?.message || "URL do jogo não disponível";
+        setLaunchError(msg);
+        toast.error(msg);
       }
-    } catch (error) {
+    } catch (error: any) {
+      const msg = error?.message || "Erro ao iniciar o jogo";
+      setLaunchError(msg);
       console.error("Error launching game:", error);
     }
   };
@@ -196,6 +202,9 @@ const Index = () => {
         onClose={() => setIsGameModalOpen(false)}
         game={selectedGame}
         gameUrl={gameUrl}
+        isLoading={launchGame.isPending}
+        errorMessage={launchError}
+        onRetry={selectedGame ? () => handlePlayGame(selectedGame) : undefined}
       />
     </div>
   );
