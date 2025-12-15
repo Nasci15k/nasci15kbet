@@ -4,6 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { RequireAuth } from "@/components/auth/RequireAuth";
+import { RequireAdmin } from "@/components/auth/RequireAdmin";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
@@ -51,38 +53,42 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
-            
-            {/* User Routes */}
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/wallet" element={<Wallet />} />
-            <Route path="/deposit" element={<Deposit />} />
-            <Route path="/withdraw" element={<Withdraw />} />
-            <Route path="/transactions" element={<Transactions />} />
-            
-            {/* Admin Routes */}
-            <Route path="/admin" element={<Dashboard />} />
-            <Route path="/admin/users" element={<Users />} />
-            <Route path="/admin/games" element={<Games />} />
-            <Route path="/admin/providers" element={<Providers />} />
-            <Route path="/admin/categories" element={<Categories />} />
-            <Route path="/admin/api-settings" element={<ApiSettings />} />
-            <Route path="/admin/appearance" element={<Appearance />} />
-            <Route path="/admin/withdrawals" element={<Withdrawals />} />
-            <Route path="/admin/deposits" element={<Deposits />} />
-            <Route path="/admin/bonuses" element={<Bonuses />} />
-            <Route path="/admin/vip" element={<VIP />} />
-            <Route path="/admin/affiliates" element={<Affiliates />} />
-            <Route path="/admin/affiliate-settings" element={<AffiliateSettings />} />
-            <Route path="/admin/commissions" element={<Commissions />} />
-            <Route path="/admin/promotions" element={<Promotions />} />
-            <Route path="/admin/support" element={<Support />} />
-            <Route path="/admin/notifications" element={<AdminNotifications />} />
-            <Route path="/admin/pages" element={<Pages />} />
-            <Route path="/admin/popups" element={<Popups />} />
-            <Route path="/admin/transactions" element={<AdminTransactions />} />
-            <Route path="/admin/payment-methods" element={<PaymentMethods />} />
-            <Route path="/admin/settings" element={<Settings />} />
-            
+
+            {/* Protected user routes */}
+            <Route element={<RequireAuth />}>
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/wallet" element={<Wallet />} />
+              <Route path="/deposit" element={<Deposit />} />
+              <Route path="/withdraw" element={<Withdraw />} />
+              <Route path="/transactions" element={<Transactions />} />
+            </Route>
+
+            {/* Protected admin routes */}
+            <Route element={<RequireAdmin />}>
+              <Route path="/admin" element={<Dashboard />} />
+              <Route path="/admin/users" element={<Users />} />
+              <Route path="/admin/games" element={<Games />} />
+              <Route path="/admin/providers" element={<Providers />} />
+              <Route path="/admin/categories" element={<Categories />} />
+              <Route path="/admin/api-settings" element={<ApiSettings />} />
+              <Route path="/admin/appearance" element={<Appearance />} />
+              <Route path="/admin/withdrawals" element={<Withdrawals />} />
+              <Route path="/admin/deposits" element={<Deposits />} />
+              <Route path="/admin/bonuses" element={<Bonuses />} />
+              <Route path="/admin/vip" element={<VIP />} />
+              <Route path="/admin/affiliates" element={<Affiliates />} />
+              <Route path="/admin/affiliate-settings" element={<AffiliateSettings />} />
+              <Route path="/admin/commissions" element={<Commissions />} />
+              <Route path="/admin/promotions" element={<Promotions />} />
+              <Route path="/admin/support" element={<Support />} />
+              <Route path="/admin/notifications" element={<AdminNotifications />} />
+              <Route path="/admin/pages" element={<Pages />} />
+              <Route path="/admin/popups" element={<Popups />} />
+              <Route path="/admin/transactions" element={<AdminTransactions />} />
+              <Route path="/admin/payment-methods" element={<PaymentMethods />} />
+              <Route path="/admin/settings" element={<Settings />} />
+            </Route>
+
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
