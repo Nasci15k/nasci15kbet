@@ -101,79 +101,89 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let mounted = true;
 
-    const init = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (!mounted) return;
-
-        setSession(session);
-        setUser(session?.user ?? null);
-
-        if (session?.user) {
-          const [profileData, adminStatus] = await Promise.all([
-            ensureProfile(session.user),
-            checkIsAdmin(session.user.id),
-          ]);
-          if (mounted) {
-            setProfile(profileData);
-            setIsAdmin(adminStatus);
-          }
-        }
-      } catch (e) {
-        console.error("Auth init error:", e);
-        if (mounted) {
-          setProfile(null);
-          setIsAdmin(false);
-        }
-      } finally {
-        if (mounted) setIsLoading(false);
-      }
-    };
-
-    init();
-
+    // 1) Subscribe FIRST (sync callback only)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!mounted) return;
-      setIsLoading(true);
 
-      try {
-        setSession(session);
-        setUser(session?.user ?? null);
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
 
-        if (session?.user) {
-          const [profileData, adminStatus] = await Promise.all([
-            ensureProfile(session.user),
-            checkIsAdmin(session.user.id),
-          ]);
-          if (mounted) {
-            setProfile(profileData);
-            setIsAdmin(adminStatus);
-          }
-        } else {
-          setProfile(null);
-          setIsAdmin(false);
-        }
-      } catch (e) {
-        console.error("Auth state change error:", e);
-        if (mounted) {
-          setProfile(null);
-          setIsAdmin(false);
-        }
-      } finally {
-        if (mounted) setIsLoading(false);
+      // Reset derived state on logout
+      if (!nextSession?.user) {
+        setProfile(null);
+        setIsAdmin(false);
       }
+
+      setIsLoading(false);
     });
+
+    // 2) Then read existing session
+    supabase.auth
+      .getSession()
+      .then(({ data: { session: existingSession } }) => {
+        if (!mounted) return;
+
+        setSession(existingSession);
+        setUser(existingSession?.user ?? null);
+
+        if (!existingSession?.user) {
+          setProfile(null);
+          setIsAdmin(false);
+        }
+
+        setIsLoading(false);
+      })
+      .catch((e) => {
+        console.error("Auth init error:", e);
+        if (!mounted) return;
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setIsAdmin(false);
+        setIsLoading(false);
+      });
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
   }, []);
+
+  // Fetch derived data (profile + admin) OUTSIDE auth callback to avoid deadlocks/loops
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      if (!user) return;
+
+      setIsLoading(true);
+      try {
+        const [profileData, adminStatus] = await Promise.all([
+          ensureProfile(user),
+          checkIsAdmin(user.id),
+        ]);
+
+        if (cancelled) return;
+        setProfile(profileData);
+        setIsAdmin(adminStatus);
+      } catch (e) {
+        console.error("Auth derived state error:", e);
+        if (cancelled) return;
+        setProfile(null);
+        setIsAdmin(false);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({
@@ -189,6 +199,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signUp = async (email: string, password: string, name: string) => {
+    const redirectUrl = `${window.location.origin}/`;
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -196,6 +208,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         data: {
           name,
         },
+        emailRedirectTo: redirectUrl,
       },
     });
 
