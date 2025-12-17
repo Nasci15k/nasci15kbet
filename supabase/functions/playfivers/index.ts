@@ -311,23 +311,32 @@ serve(async (req) => {
       }
 
       // 4) Upsert games in batches (fast + avoids timeout)
-      const gameRows = gamesArray
-        .map((g: any) => {
-          const providerName = String(g?.provider?.name || g?.provider || "").toLowerCase();
-          const provider_id = providerNameToId.get(providerName) || null;
-          const external_code = String(g.game_code || g.id);
+      // Deduplicate by external_code to avoid "ON CONFLICT DO UPDATE cannot affect row a second time"
+      const gamesMap = new Map<string, any>();
+      
+      for (const g of gamesArray) {
+        const providerName = String(g?.provider?.name || g?.provider || "").toLowerCase();
+        const provider_id = providerNameToId.get(providerName) || null;
+        const external_code = String(g.game_code || g.id);
+        const name = g.name || g.game_name;
 
-          return {
+        if (!external_code || !name) continue;
+
+        // Keep the first occurrence (or you could prefer the latest)
+        if (!gamesMap.has(external_code)) {
+          gamesMap.set(external_code, {
             external_code,
-            name: g.name || g.game_name,
+            name,
             image: g.image_url || g.image || g.banner || null,
             provider_id,
             is_active: g.status === true || g.status === 1,
             is_original: g.original ?? g.game_original ?? false,
             rtp: g.rtp || null,
-          };
-        })
-        .filter((row: any) => row.external_code && row.name);
+          });
+        }
+      }
+
+      const gameRows = Array.from(gamesMap.values());
 
       const chunkSize = 500;
       for (let i = 0; i < gameRows.length; i += chunkSize) {
