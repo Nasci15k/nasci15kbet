@@ -1,1 +1,10 @@
 project_id = "iwfqrgfaqixelztsilmo"
+
+[functions.get-outgoing-ip]
+verify_jwt = false
+
+[functions.playfivers]
+verify_jwt = false
+
+[functions.playfivers-webhook]
+verify_jwt = false
