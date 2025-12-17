@@ -122,6 +122,17 @@ serve(async (req) => {
 
       console.log("Opening game for user:", profile.user_id, "Balance:", profile.balance);
 
+      // Detect current outgoing IP (Playfivers may be using IP allowlist)
+      let outgoingIp: string | null = null;
+      try {
+        const ipRes = await fetch("https://api.ipify.org?format=json");
+        const ipJson = await ipRes.json();
+        outgoingIp = ipJson?.ip || null;
+      } catch (e) {
+        console.log("Could not detect outgoing IP:", e);
+      }
+      if (outgoingIp) console.log("Detected outgoing IP:", outgoingIp);
+
       const requestBody = {
         agentToken: agent_token,
         secretKey: secret_key,
@@ -143,7 +154,7 @@ serve(async (req) => {
       
       if (!result.ok) {
         return new Response(
-          JSON.stringify({ error: result.error }),
+          JSON.stringify({ error: result.error, outgoing_ip: outgoingIp }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
