@@ -123,14 +123,14 @@ serve(async (req) => {
       console.log("Opening game for user:", profile.user_id, "Balance:", profile.balance);
 
       const requestBody = {
-        agent_token: agent_token,
-        secret_key: secret_key,
-        user_code: profile.user_id,
-        game_code: body.gameCode,
+        agentToken: agent_token,
+        secretKey: secret_key,
+        userCode: profile.user_id,
+        gameCode: body.gameCode,
         provider: body.provider || game?.game_providers?.name || "",
-        game_original: body.gameOriginal ?? game?.is_original ?? true,
-        user_balance: profile.balance || 0,
-        user_rtp: apiSettings.rtp_default || 97,
+        gameOriginal: body.gameOriginal ?? game?.is_original ?? false,
+        userBalance: profile.balance || 0,
+        userRtp: apiSettings.rtp_default || 97,
         lang: "pt",
       };
 
